@@ -1,0 +1,12 @@
+
+.venv/
+.idea/
+__pycache__/
+*.pyc
+
+data/garbage/*
+!data/garbage/.gitkeep
+
+outputs/*.png
+outputs/*.json
+git status --short
