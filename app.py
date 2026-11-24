@@ -120,10 +120,26 @@ def load_classifier():
     image_size = checkpoint.get("image_size", 224)
 
     model = models.mobilenet_v2(weights=None)
-    model.classifier[1] = nn.Linear(
-        model.last_channel,
-        len(class_names)
-    )
+
+    # Match the architecture used during training.
+    # New checkpoints use MobileNetV2 + MLP (ANN).
+    model_type = checkpoint.get("model_type", "mobilenetv2")
+    if model_type == "mobilenetv2_mlp_ann":
+        hidden_units = checkpoint.get("hidden_units", 512)
+        dropout = checkpoint.get("dropout", 0.30)
+        model.classifier = nn.Sequential(
+            nn.Dropout(p=dropout),
+            nn.Linear(model.last_channel, hidden_units),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=dropout),
+            nn.Linear(hidden_units, len(class_names))
+        )
+    else:
+        # Backward compatibility with the original MobileNetV2 checkpoint.
+        model.classifier[1] = nn.Linear(
+            model.last_channel,
+            len(class_names)
+        )
 
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(DEVICE)
@@ -633,21 +649,33 @@ elif page == "About Model":
 
     ### Model Architecture
 
-    **MobileNetV2**
+    **MobileNetV2 + MLP (ANN)**
 
-    MobileNetV2 is a lightweight convolutional neural network
-    architecture designed for efficient image classification.
+    MobileNetV2 extracts visual features from the waste image.
+    A Multi-Layer Perceptron (MLP), which is a type of Artificial
+    Neural Network (ANN), processes those features and predicts
+    one of the 12 waste categories.
+
+    ### Architecture
+
+    - MobileNetV2 feature extractor
+    - Fully connected layer: 1280 → 512 neurons
+    - ReLU activation
+    - Dropout regularization (0.30)
+    - Output layer: 512 → 12 classes
 
     ### Training Details
 
     | Parameter | Value |
     |---|---|
-    | Architecture | MobileNetV2 |
+    | Architecture | MobileNetV2 + MLP (ANN) |
+    | MLP hidden units | 512 |
+    | Dropout | 0.30 |
     | Image size | 224 × 224 |
     | Training epochs | 5 |
     | Training images | 12,412 |
     | Validation images | 3,103 |
-    | Best validation accuracy | 96.07% |
+    | Best validation accuracy | 96.36% |
     | Hardware used | NVIDIA GTX 1650 |
     | Framework | PyTorch |
 
@@ -689,4 +717,7 @@ elif page == "About Model":
     incorrect. Always follow local municipal disposal rules.
     """)
 
-    st.info(f"Model device: {DEVICE} | Input image size: {image_size} × {image_size}")
+    st.info(
+        f"Model: MobileNetV2 + MLP (ANN) | "
+        f"Device: {DEVICE} | Input image size: {image_size} × {image_size}"
+    )

@@ -20,16 +20,20 @@ def set_seed(seed=42):
         torch.cuda.manual_seed_all(seed)
 
 
-def build_model(num_classes):
-    # Load pretrained MobileNetV2
+def build_model(num_classes, hidden_units=512, dropout=0.30):
+    """MobileNetV2 feature extractor + MLP (ANN) classification head."""
     model = models.mobilenet_v2(
         weights=MobileNet_V2_Weights.DEFAULT
     )
 
-    # Replace final classification layer
-    model.classifier[1] = nn.Linear(
-        model.last_channel,
-        num_classes
+    # MobileNetV2 extracts visual features. The following fully connected
+    # layers form a Multi-Layer Perceptron (MLP), a type of ANN.
+    model.classifier = nn.Sequential(
+        nn.Dropout(p=dropout),
+        nn.Linear(model.last_channel, hidden_units),
+        nn.ReLU(inplace=True),
+        nn.Dropout(p=dropout),
+        nn.Linear(hidden_units, num_classes)
     )
 
     return model
@@ -47,6 +51,8 @@ def main():
     parser.add_argument("--image_size", type=int, default=224)
     parser.add_argument("--lr", type=float, default=0.0001)
     parser.add_argument("--val_split", type=float, default=0.2)
+    parser.add_argument("--hidden_units", type=int, default=512)
+    parser.add_argument("--dropout", type=float, default=0.30)
 
     args = parser.parse_args()
 
@@ -181,8 +187,14 @@ def main():
 
     # Build model and move it to GPU/CPU
     model = build_model(
-        len(train_base.classes)
+        len(train_base.classes),
+        hidden_units=args.hidden_units,
+        dropout=args.dropout
     ).to(device)
+
+    print("Model: MobileNetV2 + MLP (ANN classification head)")
+    print(f"MLP hidden units: {args.hidden_units}")
+    print(f"MLP dropout: {args.dropout}")
 
     criterion = nn.CrossEntropyLoss()
 
@@ -294,6 +306,9 @@ def main():
                 "class_names": train_base.classes,
                 "image_size": args.image_size,
                 "val_accuracy": best_val_accuracy,
+                "model_type": "mobilenetv2_mlp_ann",
+                "hidden_units": args.hidden_units,
+                "dropout": args.dropout,
             }, "models/waste_classifier.pth")
 
     # Save training history
